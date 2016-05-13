@@ -23,7 +23,7 @@
 #
 #
 # Submit this script to spark like so:
-# spark-submit --master=local[4] spart-community.py --start-time=1451606400 --end-time=1451779200 -t updates -c route-views.sg
+# spark-submit --master=local[4] spark-community.py --start-time=1451606400 --end-time=1451779200 -t updates -c route-views.sg
 #
 
 import argparse
