@@ -291,10 +291,8 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # step 1: use BGPStream to process BGP data
     # output will be a list:
-    # ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
-    # the peer and collector record counts are separate as a single record
-    # may have data for multiple peers, thus naively summing the per-peer
-    # record counts would yield incorrect results
+    # ((time, collector, peer),  (Pfxs_v4_set                      ,  Pfxs_v6_set, 
+    #                            dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set)    
     raw_results = bs_rdd.flatMap(run_bgpstream)
 
     # since we split the processing by time, there will be several rows for
@@ -305,9 +303,15 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-collector-peer results back to the driver
     # we take results that are in the form:
-    # ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time, collector, peer),  (Pfxs_v4_set                      ,  Pfxs_v6_set, 
+    #                            dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set)    
     # and map them into:
-    # (time, collector, peer) => (elem_cnt, peer_record_cnt)
+    # (time, collector, peer) => (len(Pfxs_v4_set)                     , len(Pfxs_v6_set), 
+    #                             len(dict(Transit_ASNs_v4))           , dict(Transit_ASN_v6)
+    #                             min_#Pfxs_v4(dict(Transit_ASNs_v4))  , avg_#Pfxs_v4(dict(Transit_ASNs_v4))
+    #                             max_#Pfxs_v4(dict(Transit_ASNs_v4))  , std_#Pfxs_v4(dict(Transit_ASNs_v4))
+    #                             min_#Pfxs_v6(dict(Transit_ASNs_v6))  , avg_#Pfxs_v4(dict(Transit_ASNs_v6))
+    #                             max_#Pfxs_v6(dict(Transit_ASNs_v6))  , std_#Pfxs_v4(dict(Transit_ASNs_v6))
     final_time_collector_peer = reduced_time_collector_peer\
         .mapValues(MAPTransit).collectAsMap()
 
@@ -320,9 +324,15 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-collector results back to the driver
     # we take results that are in the form:
-    # ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time, collector),  (Pfxs_v4_set                       ,  Pfxs_v6_set, 
+    #                       dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set)    
     # and map them into:
-    # (time, collector) => (elem_cnt, coll_record_cnt)
+    # (time, collector)  => (len(Pfxs_v4_set)                     , len(Pfxs_v6_set), 
+    #                        len(dict(Transit_ASNs_v4))           , dict(Transit_ASN_v6)
+    #                        min_#Pfxs_v4(dict(Transit_ASNs_v4))  , avg_#Pfxs_v4(dict(Transit_ASNs_v4))
+    #                        max_#Pfxs_v4(dict(Transit_ASNs_v4))  , std_#Pfxs_v4(dict(Transit_ASNs_v4))
+    #                        min_#Pfxs_v6(dict(Transit_ASNs_v6))  , avg_#Pfxs_v4(dict(Transit_ASNs_v6))
+    #                        max_#Pfxs_v6(dict(Transit_ASNs_v6))  , std_#Pfxs_v4(dict(Transit_ASNs_v6))
     final_time_collector = reduced_time_collector\
         .mapValues(MAPTransit).collectAsMap()
 
@@ -334,9 +344,15 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-only results back to the driver
     # we take results that are in the form:
-    # (time, (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time),  (Pfxs_v4_set                       ,  Pfxs_v6_set, 
+    #            dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set)    
     # and map them into:
-    # time => (elem_cnt, coll_record_cnt)
+    # time => (len(Pfxs_v4_set)                     , len(Pfxs_v6_set), 
+    #          len(dict(Transit_ASNs_v4))           , dict(Transit_ASN_v6)
+    #          min_#Pfxs_v4(dict(Transit_ASNs_v4))  , avg_#Pfxs_v4(dict(Transit_ASNs_v4))
+    #          max_#Pfxs_v4(dict(Transit_ASNs_v4))  , std_#Pfxs_v4(dict(Transit_ASNs_v4))
+    #          min_#Pfxs_v6(dict(Transit_ASNs_v6))  , avg_#Pfxs_v4(dict(Transit_ASNs_v6))
+    #          max_#Pfxs_v6(dict(Transit_ASNs_v6))  , std_#Pfxs_v4(dict(Transit_ASNs_v6))
     final_time = reduced_time.mapValues(MAPTransit).collectAsMap()
 
     # build the output file name
@@ -367,7 +383,7 @@ def analyze(start_time, end_time, data_type, outdir,
                         tot_v4,tot_v6, pfxs_v4, pfxs_v6, min_v4, mean_v4, max_v4, std_v4
                         , min_v6, mean_v6, max_v6, std_v6])
             
-          
+        # write out the per-time statistics
         for key in final_time:
             (ts) = key
             (tot_v4,tot_v6, pfxs_v4, pfxs_v6, min_v4, mean_v4, max_v4, std_v4
