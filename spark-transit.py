@@ -146,8 +146,8 @@ def partition_time(start_time, end_time, len):
 
 
 # takes two result tuples, each of the format:
-#  (Pfxs_v4_set                    ,  Pfxs_v6_set, 
-#   dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set)
+#  (Pfxs_v4_set                       ,  Pfxs_v6_set, 
+#   dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set)
 # and returns a single result tuple which is the sum of the two inputs.
 # len(result_x) is assumed to be the same length as len(result_y)
 def merge_results(result_x, result_y):
@@ -169,8 +169,8 @@ def merge_results(result_x, result_y):
 #  ((time, collector, peer), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
 #                             dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
 # and returns
-# ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
-#                      dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
+# ((time, collector), (Pfxs_v4_set                       ,  Pfxs_v6_set, 
+#                      dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set))
 def map_per_collector(row):
     return (row[0][0], row[0][1]), row[1]
 
@@ -179,17 +179,26 @@ def map_per_collector(row):
 #  ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
 #                       dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
 # and returns
-#  ((time), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
-#            dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
+#  ((time), (Pfxs_v4_set                       ,  Pfxs_v6_set, 
+#            dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set))
 def map_per_time(row):
     return (row[0][0]), row[1]
 
 # takes a result row:
 #  ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
-#                       dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
+#                       dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set))
 and returns
-#
-#
+
+# we take result values that are in the form:
+#  (Pfxs_v4_set                      ,  Pfxs_v6_set, 
+#  dict(Transit_ASN_v4)=Pfxs_v4_set  ,  dict(Transit_ASN_v6)=Pfxs_v6_set)
+# and map them into:
+#  (len(Pfxs_v4_set)                    , len(Pfxs_v6_set), 
+#  len(dict(Transit_ASNs_v4))           , dict(Transit_ASN_v6)
+#  min_#Pfxs_v4(dict(Transit_ASNs_v4))  , avg_#Pfxs_v4(dict(Transit_ASNs_v4))
+#  max_#Pfxs_v4(dict(Transit_ASNs_v4))  , std_#Pfxs_v4(dict(Transit_ASNs_v4))
+#  min_#Pfxs_v6(dict(Transit_ASNs_v6))  , avg_#Pfxs_v4(dict(Transit_ASNs_v6))
+#  max_#Pfxs_v6(dict(Transit_ASNs_v6))  , std_#Pfxs_v4(dict(Transit_ASNs_v6)))
 def MAPTransit(x):
     
     stats=[len(x[0]),len(x[1]),len(x[2]),len(x[3]),0,0,0,0,0,0,0,0]
