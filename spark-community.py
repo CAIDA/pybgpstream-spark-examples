@@ -94,7 +94,13 @@ def run_bgpstream(args):
             sig = peer_signature(rec, elem)
             peer_asn =  elem.peer_asn
             # if this is the first time we have ever seen this peer, create
-            # an empty result: (elem_cnt, peer_record_cnt, coll_record_cnt)
+            # an empty result: (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+            #                   Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+            #                   Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+            #                   External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+            #                   Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+            #                   Community_v4_set               ,  Community_v6_set)
+
             if sig not in peers_data:
                 peers_data[sig] =[set(),set(),
                                    set(),set(),
@@ -143,10 +149,6 @@ def run_bgpstream(args):
 
             elem = rec.get_next_elem()
 
-        # done with elems, increment the 'coll_record_cnt' field for just
-        # one peer that was present in this record (allows a true, per-collector
-        # count of records since each record can contain elems for many peers)
-
     # the time in the output row is truncated down to a multiple of
     # RESULT_GRANULARITY so that slices can be merged correctly
     start_time = \
@@ -168,7 +170,12 @@ def partition_time(start_time, end_time, len):
 
 
 # takes two result tuples, each of the format:
-#  (elem_cnt, peer_record_cnt, coll_record_cnt)
+# (Pfxs_v4_set                   ,  Pfxs_v6_set, 
+# Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+# Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+# External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+# Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+# Community_v4_set               ,  Community_v6_set)
 # and returns a single result tuple which is the sum of the two inputs.
 # len(result_x) is assumed to be the same length as len(result_y)
 def merge_results(result_x, result_y):
@@ -177,22 +184,39 @@ def merge_results(result_x, result_y):
        
 
 # takes a result row:
-#  ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
+# ((time, collector, peer), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                            Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+#                            Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+#                            External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+#                            Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+#                            Community_v4_set               ,  Community_v6_set))
 # and returns
-# ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+# ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                      Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+#                      Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+#                      External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+#                      Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+#                      Community_v4_set               ,  Community_v6_set))
 def map_per_collector(row):
     return (row[0][0], row[0][1]), row[1]
 
 
 # takes a result row:
-#  ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+# ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                      Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+#                      Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+#                      External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+#                      Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+#                      Community_v4_set               ,  Community_v6_set))
 # and returns
-#  ((time), (elem_cnt, peer_record_cnt, coll_record_cnt))
+# ((time), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#           Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+#           Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+#           External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+#           Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+#           Community_v4_set               ,  Community_v6_set))
 def map_per_time(row):
     return (row[0][0]), row[1]
-
-
-
 
 def analyze(start_time, end_time, data_type, outdir,
             collector=None, num_cores=None, memory=None):
@@ -257,10 +281,12 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # step 1: use BGPStream to process BGP data
     # output will be a list:
-    # ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
-    # the peer and collector record counts are separate as a single record
-    # may have data for multiple peers, thus naively summing the per-peer
-    # record counts would yield incorrect results
+    #  ((time, collector,peer), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+    #                            Community_Pfxs_v4_set          ,  Community_Pfxs_v6_set,
+    #                            Internal_Community_Pfxs_v4_set ,  Internal_Community_Pfxs_v6_set,
+    #                            External_Community_Pfxs_v4_set ,  External_Community_Pfxs_v6_set,
+    #                            Community_ASNs_v4_set          ,  Community_ASNs_v6_set,
+    #                            Community_v4_set               ,  Community_v6_set))    
     raw_results = bs_rdd.flatMap(run_bgpstream)
 
     # since we split the processing by time, there will be several rows for
@@ -271,9 +297,20 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-collector-peer results back to the driver
     # we take results that are in the form:
-    # ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time, collector,peer), (len(Pfxs_v4_set)                    ,  len(Pfxs_v6_set), 
+    #                           len(Community_Pfxs_v4_set)          ,  len(Community_Pfxs_v6_set),
+    #                           len(Internal_Community_Pfxs_v4_set) ,  len(Internal_Community_Pfxs_v6_set),
+    #                           len(External_Community_Pfxs_v4_set) ,  len(External_Community_Pfxs_v6_set),
+    #                           len(Community_ASNs_v4_set)          ,  len(Community_ASNs_v6_set),
+    #                           len(Community_v4_set)               ,  len(Community_v6_set))        
     # and map them into:
-    # (time, collector, peer) => (elem_cnt, peer_record_cnt)
+    # (time, collector,peer) =>  (len(Pfxs_v4_set)                    ,  len(Pfxs_v6_set), 
+    #                             len(Community_Pfxs_v4_set)          ,  len(Community_Pfxs_v6_set),
+    #                             len(Internal_Community_Pfxs_v4_set) ,  len(Internal_Community_Pfxs_v6_set),
+    #                             len(External_Community_Pfxs_v4_set) ,  len(External_Community_Pfxs_v6_set),
+    #                             len(Community_ASNs_v4_set)          ,  len(Community_ASNs_v6_set),
+    #                             len(Community_v4_set)               ,  len(Community_v6_set))      
+    
     final_time_collector_peer = reduced_time_collector_peer\
         .mapValues(lambda x: [len(x[i]) for i in range(0,len(x))]).collectAsMap()
 
@@ -286,9 +323,20 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-collector results back to the driver
     # we take results that are in the form:
-    # ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time, collector), (len(Pfxs_v4_set)                    ,  len(Pfxs_v6_set), 
+    #                      len(Community_Pfxs_v4_set)          ,  len(Community_Pfxs_v6_set),
+    #                      len(Internal_Community_Pfxs_v4_set) ,  len(Internal_Community_Pfxs_v6_set),
+    #                      len(External_Community_Pfxs_v4_set) ,  len(External_Community_Pfxs_v6_set),
+    #                      len(Community_ASNs_v4_set)          ,  len(Community_ASNs_v6_set),
+    #                      len(Community_v4_set)               ,  len(Community_v6_set))     
     # and map them into:
-    # (time, collector) => (elem_cnt, coll_record_cnt)
+    # (time, collector) =>  (len(Pfxs_v4_set)                    ,  len(Pfxs_v6_set), 
+    #                        len(Community_Pfxs_v4_set)          ,  len(Community_Pfxs_v6_set),
+    #                        len(Internal_Community_Pfxs_v4_set) ,  len(Internal_Community_Pfxs_v6_set),
+    #                        len(External_Community_Pfxs_v4_set) ,  len(External_Community_Pfxs_v6_set),
+    #                        len(Community_ASNs_v4_set)          ,  len(Community_ASNs_v6_set),
+    #                        len(Community_v4_set)               ,  len(Community_v6_set))        
+
     final_time_collector = reduced_time_collector\
         .mapValues(lambda x: [len(x[i]) for i in range(0,len(x))]).collectAsMap()
 
@@ -300,9 +348,20 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-only results back to the driver
     # we take results that are in the form:
-    # (time, (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time), (len(Pfxs_v4_set)                    ,  len(Pfxs_v6_set), 
+    #           len(Community_Pfxs_v4_set)          ,  len(Community_Pfxs_v6_set),
+    #           len(Internal_Community_Pfxs_v4_set) ,  len(Internal_Community_Pfxs_v6_set),
+    #           len(External_Community_Pfxs_v4_set) ,  len(External_Community_Pfxs_v6_set),
+    #           len(Community_ASNs_v4_set)          ,  len(Community_ASNs_v6_set),
+    #           len(Community_v4_set)               ,  len(Community_v6_set))     
     # and map them into:
-    # time => (elem_cnt, coll_record_cnt)
+    # time =>  (len(Pfxs_v4_set)                    ,  len(Pfxs_v6_set), 
+    #           len(Community_Pfxs_v4_set)          ,  len(Community_Pfxs_v6_set),
+    #           len(Internal_Community_Pfxs_v4_set) ,  len(Internal_Community_Pfxs_v6_set),
+    #           len(External_Community_Pfxs_v4_set) ,  len(External_Community_Pfxs_v6_set),
+    #           len(Community_ASNs_v4_set)          ,  len(Community_ASNs_v6_set),
+    #           len(Community_v4_set)               ,  len(Community_v6_set))       
+
     final_time = reduced_time.mapValues(lambda x: [len(x[i]) for i in range(0,len(x))]).collectAsMap()
 
     # build the output file name
@@ -334,7 +393,7 @@ def analyze(start_time, end_time, data_type, outdir,
                         tot_v4,tot_v6, pfxs_v4, pfxs_v6, min_v4, mean_v4, max_v4, std_v4
                         , min_v6, mean_v6, max_v6, std_v6])
             
-          
+        # write out the per-time statistics
         for key in final_time:
             (ts) = key
             (tot_v4,tot_v6, pfxs_v4, pfxs_v6, min_v4, mean_v4, max_v4, std_v4
