@@ -92,7 +92,7 @@ def run_bgpstream(args):
             # create a peer signature for this elem
             sig = peer_signature(rec, elem)
             # if this is the first time we have ever seen this peer, create
-            # an empty result: (elem_cnt, peer_record_cnt, coll_record_cnt)
+            # an empty result: (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
             if sig not in peers_data:
                 peers_data[sig] =[{},{}]
 
@@ -108,18 +108,16 @@ def run_bgpstream(args):
                 if(":" in pfx):
                     if(pfx not in peers_data[sig][1]):
                         peers_data[sig][1][pfx]=set()
+                    #discard as origin: AS sets, and ASN=23456 [AS_TRANS]
                     if(origin!="" and origin!="23456" and "{" not in origin): peers_data[sig][1][pfx].add(origin)
                 else:
                     if(pfx not in peers_data[sig][0]):
                         peers_data[sig][0][pfx]=set()
+                    #discard as origin: AS sets, and ASN=23456 [AS_TRANS]
                     if(origin!="" and origin!="23456" and "{" not in origin): peers_data[sig][0][pfx].add(origin)
 
 
             elem = rec.get_next_elem()
-
-        # done with elems, increment the 'coll_record_cnt' field for just
-        # one peer that was present in this record (allows a true, per-collector
-        # count of records since each record can contain elems for many peers)
 
     # the time in the output row is truncated down to a multiple of
     # RESULT_GRANULARITY so that slices can be merged correctly
@@ -142,7 +140,7 @@ def partition_time(start_time, end_time, len):
 
 
 # takes two result tuples, each of the format:
-#  (elem_cnt, peer_record_cnt, coll_record_cnt)
+#  (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
 # and returns a single result tuple which is the sum of the two inputs.
 # len(result_x) is assumed to be the same length as len(result_y)
 def merge_results(result_x, result_y):
@@ -160,22 +158,27 @@ def merge_results(result_x, result_y):
 
 
 # takes a result row:
-#  ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
+#  ((time, collector, peer), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
 # and returns
-# ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+# ((time, collector), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
 def map_per_collector(row):
     return (row[0][0], row[0][1]), row[1]
 
 
 # takes a result row:
-#  ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+#  ((time, collector), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
 # and returns
-#  ((time), (elem_cnt, peer_record_cnt, coll_record_cnt))
+#  ((time), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
 def map_per_time(row):
     return (row[0][0]), row[1]
 
 
-
+# we take result values that are in the form:
+#  (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
+# and map them into:
+#  (len(dict(Pfx_v4))   , len(dict(Pfx_v4)), 
+#  #Pfxs_v4_MOAS        , #Pfxs_v6_MOAS,
+#  len(Origin_Sets_v4)  , len(Origin_Sets_v4))  
 def MAPMoas(result_x):
     
     stats=[0,0,0,0,set(),set()]
@@ -261,10 +264,7 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # step 1: use BGPStream to process BGP data
     # output will be a list:
-    # ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
-    # the peer and collector record counts are separate as a single record
-    # may have data for multiple peers, thus naively summing the per-peer
-    # record counts would yield incorrect results
+    # ((time, collector, peer), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
     raw_results = bs_rdd.flatMap(run_bgpstream)
 
     # since we split the processing by time, there will be several rows for
@@ -275,9 +275,11 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-collector-peer results back to the driver
     # we take results that are in the form:
-    # ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time, collector, peer), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
     # and map them into:
-    # (time, collector, peer) => (elem_cnt, peer_record_cnt)
+    # (time, collector, peer) => (len(dict(Pfx_v4))    , len(dict(Pfx_v4)), 
+    #                             #Pfxs_v4_MOAS        , #Pfxs_v6_MOAS,
+    #                             len(Origin_Sets_v4)  , len(Origin_Sets_v4))  
     final_time_collector_peer = reduced_time_collector_peer\
         .mapValues(MAPMoas).collectAsMap()
 
@@ -290,9 +292,11 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-collector results back to the driver
     # we take results that are in the form:
-    # ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # ((time, collector), (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
     # and map them into:
-    # (time, collector) => (elem_cnt, coll_record_cnt)
+    # (time, collector) => (len(dict(Pfx_v4))   , len(dict(Pfx_v4)), 
+    #                      #Pfxs_v4_MOAS        , #Pfxs_v6_MOAS,
+    #                      len(Origin_Sets_v4)  , len(Origin_Sets_v4))  
     final_time_collector = reduced_time_collector\
         .mapValues(MAPMoas).collectAsMap()
 
@@ -304,9 +308,11 @@ def analyze(start_time, end_time, data_type, outdir,
 
     # collect the reduced time-only results back to the driver
     # we take results that are in the form:
-    # (time, (elem_cnt, peer_record_cnt, coll_record_cnt))
+    # (time, (dict(Pfx_v4)=Pfx_origins,  dict(Pfx_v6)=Pfx_origins))
     # and map them into:
-    # time => (elem_cnt, coll_record_cnt)
+    # time => (len(dict(Pfx_v4))    , len(dict(Pfx_v4)), 
+    #          #Pfxs_v4_MOAS        , #Pfxs_v6_MOAS,
+    #          len(Origin_Sets_v4)  , len(Origin_Sets_v4))  
     final_time = reduced_time.mapValues(MAPMoas).collectAsMap()
 
     # build the output file name
@@ -331,7 +337,7 @@ def analyze(start_time, end_time, data_type, outdir,
             w.writerow([ts, coll,"ALL-PEERS",
                         tot_v4,tot_v6, pfxs_v4, pfxs_v6, sets_v4, sets_v6])
             
-          
+        # write out the per-time statistics
         for key in final_time:
             (ts) = key
             (tot_v4,tot_v6, pfxs_v4, pfxs_v6, sets_v4, sets_v6) = final_time[key]
