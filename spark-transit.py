@@ -93,7 +93,8 @@ def run_bgpstream(args):
             # create a peer signature for this elem
             sig = peer_signature(rec, elem)
             # if this is the first time we have ever seen this peer, create
-            # an empty result: (elem_cnt, peer_record_cnt, coll_record_cnt)
+            # an empty result: (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+            #                   dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set)
             if sig not in peers_data:
                 peers_data[sig] =[set(),set(),{},{}]
 
@@ -108,6 +109,7 @@ def run_bgpstream(args):
                     peers_data[sig][0].add(pfx)
             
             if('as-path' in elem.fields):
+                #Squash the AS Path to keep only distinct ASNs, i.e., remove prepending 
                 path_split = [k for k, g in groupby(elem.fields['as-path'].split(" "))]    
                 if(len(path_split)!=0): 
                     for i in range(1,len(path_split)-1):
@@ -122,10 +124,6 @@ def run_bgpstream(args):
                             peers_data[sig][2][transit].add(pfx)  
 
             elem = rec.get_next_elem()
-
-        # done with elems, increment the 'coll_record_cnt' field for just
-        # one peer that was present in this record (allows a true, per-collector
-        # count of records since each record can contain elems for many peers)
 
     # the time in the output row is truncated down to a multiple of
     # RESULT_GRANULARITY so that slices can be merged correctly
@@ -148,7 +146,8 @@ def partition_time(start_time, end_time, len):
 
 
 # takes two result tuples, each of the format:
-#  (elem_cnt, peer_record_cnt, coll_record_cnt)
+#  (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#   dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set)
 # and returns a single result tuple which is the sum of the two inputs.
 # len(result_x) is assumed to be the same length as len(result_y)
 def merge_results(result_x, result_y):
@@ -167,21 +166,30 @@ def merge_results(result_x, result_y):
        
 
 # takes a result row:
-#  ((time, collector, peer), (elem_cnt, peer_record_cnt, coll_record_cnt))
+#  ((time, collector, peer), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                             dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
 # and returns
-# ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+# ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                      dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
 def map_per_collector(row):
     return (row[0][0], row[0][1]), row[1]
 
 
 # takes a result row:
-#  ((time, collector), (elem_cnt, peer_record_cnt, coll_record_cnt))
+#  ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                       dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
 # and returns
-#  ((time), (elem_cnt, peer_record_cnt, coll_record_cnt))
+#  ((time), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#            dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
 def map_per_time(row):
     return (row[0][0]), row[1]
 
-
+# takes a result row:
+#  ((time, collector), (Pfxs_v4_set                    ,  Pfxs_v6_set, 
+#                       dict(Transit_ASN)=Pfxs_v4_set  ,  dict(Transit_ASN)=Pfxs_v6_set))
+and returns
+#
+#
 def MAPTransit(x):
     
     stats=[len(x[0]),len(x[1]),len(x[2]),len(x[3]),0,0,0,0,0,0,0,0]
